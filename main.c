@@ -1,10 +1,6 @@
-//
-//
 // ----------------------------------------------------------------------------
-//
 // Chris Kelly and Jonah Boretsky CENG 355
 // ----------------------------------------------------------------------------
-//
 //
 #include <stdio.h>
 #include "diag/Trace.h"
@@ -36,7 +32,7 @@
 /* Maximum possible setting for overflow */
 #define myTIM2_PERIOD ((uint32_t)0xFFFFFFFF)
 
-//spi usefull functions
+// SPI typedefs
 SPI_InitTypeDef SPI_InitStructInfo;
 SPI_InitTypeDef* SPI_InitStruct = &SPI_InitStructInfo;
 
@@ -48,7 +44,7 @@ void myDAC_Init(void);
 void mySPI_Init(void);
 
 void SPISendData(uint8_t);
-void Delay(volatile long);
+void wait(volatile long);
 void LCD_Init(void);
 void CommandSend(uint8_t);
 void CommandEnable(uint8_t);
@@ -60,15 +56,10 @@ void DisplayFrequency(int);
 unsigned int count;
 unsigned int edge = 0;
 int freq = 0;
-int thousand = 0;
-int hundred = 0;
-int ten = 0;
-int one = 0;
 int resis = 0;
 
 int main(int argc, char* argv[])
 {
-  /*INITIALIZATIONS*/
   myGPIO_Init();            /* Initialize I/O port PA */
   myTIM2_Init();            /* Initialize timer TIM2 */
   myEXTI_Init();            /* Initialize EXTI */
@@ -77,206 +68,183 @@ int main(int argc, char* argv[])
   mySPI_Init();            /* initialize SPI*/
   LCD_Init();              /* initialize LCD*/
 
-  trace_printf("initialization complete\n");
+  trace_printf("Initialization complete\n");
 
   // pause after every command and data byte sent.
   // also pause between nibbles
   while (1) //loops forever
   {
-    //trace_printf("Inside main loop.\n");
-    ADC1->CR = ADC_CR_ADSTART;                                    //Starting ADC
-    while((ADC1->ISR & ADC_ISR_EOC) == 0);            //Wait until the ADC has completed conversions
+    ADC1->CR = ADC_CR_ADSTART; // Start the ADC
+    while((ADC1->ISR & ADC_ISR_EOC) == 0); // Wait for the ADC to complete conversion
     //trace_printf("ADC completed conversion.\n");
 
-    DAC->DHR12R1 = ADC1->DR;            //output signal of ADC to the input of the DAC
+    DAC->DHR12R1 = ADC1->DR;       //output signal of ADC to the input of the DAC
 
-    resis = (ADC1->DR)*5000/4095;       //Resistance calculation
-    DisplayFrequency(freq);             // sends freq to Frequency display function
-    DisplayResistance(resis);           // sends resis to the resistance display function
+    resis = (ADC1->DR)*5000/4095;  // Calculate resistance
+    DisplayFrequency(freq);        // send frequency to the LCD
+    DisplayResistance(resis);      // send resistance to the LCD
   }
 
   return 0;
 }
 
 void DisplayResistance(int Resistance){
-  thousand = Resistance/1000;                    //parsing the resistance data and breaking it up into categories
-  hundred = (Resistance/100) % 10;
-  ten = (Resistance/10) % 10;
-  one = (Resistance) % 10;
+  // break up the digits of the resistance
+  int thousands = Resistance/1000;
+  int hundred = (Resistance/100) % 10;
+  int ten = (Resistance/10) % 10;
+  int one = (Resistance) % 10;
 
-  CommandSend(0xC0);            //setting display to be on the second line of the LCD
+  CommandSend(0xC0); // set display to write to second line of the LCD
 
-  SendToLCD(0x52);    //"R"
-  SendToLCD(0x3A);          //":"
-  SendToLCD(thousand+ '0');    //send each digit
-  SendToLCD(hundred+ '0');    //+ '0' sends the digit to the correct ASCII number
-  SendToLCD(ten+ '0');        // could use + 48 instead
+  SendToLCD(0x52); // "R"
+  SendToLCD(0x3A); // ":"
+
+  // send each digit to the LCD
+  // ('0' is converted to 48, and converts the resulting number to the corresponding ASCII number
+  SendToLCD(thousands + '0');
+  SendToLCD(hundred + '0');
+  SendToLCD(ten+ '0');
   SendToLCD(one+ '0');
 
-  SendToLCD(0xF4);    //"O"
+  SendToLCD(0xF4); //"O"
 }
 
 void sendr() {
-  CommandSend(0xC0);            //setting display to be on the second line of the LCD
-  Delay(DELAY);
-  SendToLCD(0x52);    //"R"
-  Delay(DELAY);
+  CommandSend(0xC0); // set display to write to second line of the LCD
+  wait(DELAY);
+  SendToLCD(0x52); // "R"
+  wait(DELAY);
 }
 
-void DisplayFrequency(int Frequency){
-  thousand = Frequency/1000 % 10;            //Separating Frequency value into each digit
-  hundred = (Frequency/100) % 10;
-  ten = (Frequency/10) % 10;
-  one = (Frequency) % 10;
+void DisplayFrequency(int Frequency) {
+  // break up the digits of the frequency
+  int thousands = Frequency/1000 % 10;
+  int hundreds = (Frequency/100) % 10;
+  int tens = (Frequency/10) % 10;
+  int ones = (Frequency) % 10;
 
   CommandSend(0x80);            //setting display to start with the LCD's first line
 
-  SendToLCD(0x46);    //"F"
-  SendToLCD(0x3A);    //":"
+  SendToLCD(0x46); //"F"
+  SendToLCD(0x3A); //":"
 
-  SendToLCD(thousand+'0');    //sending each digit
-  SendToLCD(hundred+'0');            //+ '0' sends the digit to the correct ASCII number
-  SendToLCD(ten+'0');                    // could use + 48 instead
-  SendToLCD(one+'0');
+  // send each digit to the LCD. ('0' is converted to 48, and
+  // converts the resulting number to the corresponding ASCII number
+  SendToLCD(thousands + '0');
+  SendToLCD(hundreds + '0');
+  SendToLCD(tens + '0');
+  SendToLCD(ones + '0');
 
-  SendToLCD(0x48);    //"H"
-  SendToLCD(0x7A);    //"z"
+  SendToLCD(0x48); //"H"
+  SendToLCD(0x7A); //"z"
 }
 
-void SPISendData(uint8_t Data)
-{
+void SPISendData(uint8_t Data) {
   //Force LCK signal to 0
-  GPIOB->BRR |= GPIO_BRR_BR_4;                    //set lock signal to 0 (freeze the ports)
-  Delay(2500);                                    //GPIO delay
+  GPIOB->BRR |= GPIO_BRR_BR_4;  //set lock signal to 0 (freeze the ports)
+  wait(2500); // GPIO delay
 
-  while((SPI1->SR & SPI_SR_BSY) != 0);            //wait until SPI is ready
-  SPI_SendData8(SPI1, Data);                      //send data to the SPI
+  while((SPI1->SR & SPI_SR_BSY) != 0); // wait until SPI is ready
+  SPI_SendData8(SPI1, Data); // send data to the SPI
 
-  //trace_printf("%x\n", Data);
-
-  //trace_printf()
-  //Test buffer value
-  //trace_printf("%u\n", SPI1->DR);
-
-  while((SPI1->SR & SPI_SR_BSY) != 0);            //wait again until SPI is ready
+  while((SPI1->SR & SPI_SR_BSY) != 0); // wait again until SPI is ready
 
   //Force LCK signal to 1
-  GPIOB->BSRR = GPIO_BSRR_BS_4;                   //set lock signal to 1     (enable the port)
-  Delay(2500);                                    //GPIO delay
+  GPIOB->BSRR = GPIO_BSRR_BS_4; // set lock signal to 1 (enable the port)
+  wait(2500); // GPIO delay
 }
 
-void DataEnable(uint8_t Word) // good
-{
-  uint8_t L = Word | 0x40;      //set high nibble to 0100  -> RS:1 -> LCD sees as DATA
-  uint8_t H = Word | 0xC0;      //set high nibble to 1100  -> EN:1, RS:1 -> DATA, LCD READS
+void DataEnable(uint8_t Word){
+  uint8_t L = Word | 0x40; //set high nibble to 0100  -> RS:1 -> LCD sees as DATA
+  uint8_t H = Word | 0xC0; //set high nibble to 1100  -> EN:1, RS:1 -> DATA, LCD READS
 
-  SPISendData(L);        //send L to SPI ( send data)
-  //Delay(700);            //SPI delay
+  SPISendData(L); //send L to SPI ( send data)
 
-  SPISendData(H);        //send H to SPI (send data and ask LCD to read it)
-  //Delay(700);            //SPI delay
+  SPISendData(H); //send H to SPI (send data and ask LCD to read it)
 
-  SPISendData(L);        // (re-send data)
-  // Delay(700);            //SPI delay
+  SPISendData(L); // (re-send data)
 }
 
-void CommandEnable(uint8_t Word) // good
-{
+void CommandEnable(uint8_t Word){
   uint8_t EN = Word | 0x80;
 
-  SPISendData(Word);            //send     the enable word to the SPI
-  //Delay(700);                            //SPI delay
-
-  SPISendData(EN);
-  //Delay(700);                            //SPI delay
-
+  // send the word and toggle the EN bit
   SPISendData(Word);
-  //Delay(700);                            //SPI delay
+  SPISendData(EN);
+  SPISendData(Word);
 }
 
-void CommandSend(uint8_t Word)
-{
-  uint8_t HighOrder = ((Word >> 4) & 0x0F);            //shifts the most significant bits to the least significant side and masks the most significant bits with 0
-  CommandEnable(HighOrder);                                            //send shifted value to CommandEnable
-  Delay(DELAY);
-  uint8_t LowOrder = (Word & 0x0F);            //no need to shift bits, mask the higher order bits
-  CommandEnable(LowOrder);                            //send values straight to CommandSend
-  Delay(DELAY);
+void CommandSend(uint8_t Word){
+  // shift high nibble to low order bits and clear the high order bits
+  uint8_t HighOrder = ((Word >> 4) & 0x0F);
+  CommandEnable(HighOrder);
+  wait(DELAY);
+
+  // clear the high order bits so we can send just the low nibble
+  uint8_t LowOrder = (Word & 0x0F);
+  CommandEnable(LowOrder);
+  wait(DELAY);
 }
 
-void Delay(volatile long delay)
-{
+void wait(volatile long delay){
   while (delay != 0)
   {
     delay--;
   }
 }
 
-void SendToLCD(uint8_t Word)
-{
-  //trace_printf("%c\n", Word);
-  // cpjk: shift high nibble to low order bits clear the high order bits
-  uint8_t HighOrder = ((Word >> 4) & 0x0F);   //shift msb to lsb and mask the msb with 0 (get rid of msb)
-  DataEnable(HighOrder);                      //send the data
-  Delay(DELAY);
+void SendToLCD(uint8_t Word){
+  // shift high nibble to low order bits and clear the high order bits
+  uint8_t HighOrder = ((Word >> 4) & 0x0F);
+  DataEnable(HighOrder);
+  wait(DELAY);
 
-  // cpjk: clear the high order bits so we can send just the low nibble
-  uint8_t LowOrder = (Word & 0x0F);           //no need to shift, send lsb data
+  // clear the high order bits so we can send just the low nibble
+  uint8_t LowOrder = (Word & 0x0F);
   DataEnable(LowOrder);
-  Delay(DELAY);
+  wait(DELAY); // delay for LCD
 }
 
-void LCD_Init()
-{
+void LCD_Init(){
   /* Initial delay */
-  Delay(DELAY);
+  wait(DELAY);
 
   /*
      LCD may initially be in one of three states:
      (State1) 8-bit mode
      (State2) 4-bit mode, waiting for the first set of 4 bits
      (State3) 4-bit mode, waiting for the second set of 4 bits
-     */
 
-  // Set D7-D4 to 0b0011, and toggle the enable bit.
-  // this ensures the LCD is definitely in 8-bit mode
-  for(int i = 0; i<3;i++)
-  {
+     Set D7-D4 to 0b0011, and toggle the enable bit.
+     This ensures the LCD is definitely in 8-bit mode
+  */
+  for(int i = 0; i<3;i++){
+    // Set D7-D4 to 0b0011, and toggle the enable bit.
     SPISendData(0x03);
-    //Delay(500000);
-    //Delay(50000);
-
     SPISendData(0x83);
-    //Delay(500000);
-    //Delay(50000);
-
     SPISendData(0x03);
-    // Delay(500000);
-    //Delay(50000);
   }
   // LCD is in 8-bit mode
 
   // Toggle the enable bit while sending  (D7-D4) = 0010.
-  // This sets the LCD in 4-bit mode
-  SPISendData(0x02); // Send (D7-D4) - 0010 (RS=0)
-  //Delay(500);
-  SPISendData(0x82); // Send (D7-D4) - 1000 0010 (RS=0) (EN=1)
-  //Delay(500);
-  //SPISendData(0x82); // Send (D7-D4) - 0010 (RS=0)
-  SPISendData(0x02); // Send (D7-D4) - 0010 (RS=0)
-  //Delay(500);
+  // This sets the LCD to 4-bit mode
+  SPISendData(0x02); // Send (D7-D4) = 0010 with (RS=0)
+  SPISendData(0x82); // Send (D7-D4) = 0010 with (RS=0) (EN=1)
+  SPISendData(0x02); // Send (D7-D4) = 0010 with (RS=0)
+
   // LCD is now in 4-bit mode
 
-  CommandSend(0x28); //DL = 0, N = 1, F = 0
-  CommandSend(0x0C); //D = 1, C = 0, B = 0
-  CommandSend(0x06); //I/D = 1, S = 0
-  CommandSend(0x01); //Clears display
+  // initialize the display
+  CommandSend(0x28); // DL = 0, N = 1, F = 0 -> DRAM is accessed using 4-bit interface, 2 lines of 8 chars are displayed
+  CommandSend(0x0C); // D = 1, C = 0, B = 0 -> Display on, no cursor, cursor is not blinking
+  CommandSend(0x06); // I/D = 1, S = 0 -> DDRAM addr is auto-incremented after each access, Display not shifted
+  CommandSend(0x01); // Clear display
 
-  Delay(DELAY);
+  wait(DELAY);
 }
 
-void myGPIO_Init()
-{
+void myGPIO_Init(){
   /* Enable clock for GPIOA peripheral */
   //RCC->AHBENR = 0x10000;
   //relevant register: RCC->AHBENR
@@ -285,7 +253,6 @@ void myGPIO_Init()
 
   //Configure PB1 as alternate function input
   GPIOB->AFR[2] = ((uint32_t)0x00000000);
-
 
   /* Configure PA1, PA2, PA4 to analog mode*/
   //relevant register: GPIOA->MODER
