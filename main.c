@@ -54,9 +54,9 @@ void DisplayResistance(int);
 void DisplayFrequency(int);
 
 unsigned int count;
-unsigned int edge = 0;
-int freq = 0;
-int resis = 0;
+unsigned int edge = 0; // 1 = after rising edge. 0 = after falling edge
+int frequency = 0;
+int resistance = 0;
 
 int main(int argc, char* argv[])
 {
@@ -80,9 +80,9 @@ int main(int argc, char* argv[])
 
     DAC->DHR12R1 = ADC1->DR;       //output signal of ADC to the input of the DAC
 
-    resis = (ADC1->DR)*5000/4095;  // Calculate resistance
-    DisplayFrequency(freq);        // send frequency to the LCD
-    DisplayResistance(resis);      // send resistance to the LCD
+    resistance = (ADC1->DR)*5000/4095;  // Calculate resistance
+    DisplayFrequency(frequency);        // send frequency to the LCD
+    DisplayResistance(resistance);      // send resistance to the LCD
   }
 
   return 0;
@@ -265,8 +265,7 @@ void myGPIO_Init(){
   GPIOB->PUPDR &= ~(GPIO_PUPDR_PUPDR3 | GPIO_PUPDR_PUPDR4 | GPIO_PUPDR_PUPDR5);
 }
 
-void myTIM2_Init()
-{
+void myTIM2_Init(){
   /* Enable clock for TIM2 peripheral */
   RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
 
@@ -293,8 +292,7 @@ void myTIM2_Init()
   TIM2->DIER |= TIM_DIER_UIE;
 }
 
-void myEXTI_Init()
-{
+void myEXTI_Init(){
   /* Map EXTI1 line to PA1 */
   SYSCFG->EXTICR[1] = 0x1000;
 
@@ -311,8 +309,7 @@ void myEXTI_Init()
   NVIC_EnableIRQ(EXTI0_1_IRQn);
 }
 
-void myADC_Init()
-{
+void myADC_Init(){
   RCC->APB2ENR |= RCC_APB2ENR_ADCEN;            //ADC1 clock enable
   ADC1->CFGR1 |= ADC_CFGR1_CONT;                    //this bit will ensure the ADC is in  continuous mosde and not single conversion mode
   ADC1->CHSELR |= ADC_CHSELR_CHSEL2;            //channel 2 is selected for conversion
@@ -321,8 +318,7 @@ void myADC_Init()
   while((ADC1->ISR & ADC_ISR_ADRDY) == 0);    //wait until ADC is ready
 }
 
-void myDAC_Init()
-{
+void myDAC_Init(){
   RCC->APB1ENR |= RCC_APB1ENR_DACEN;                    //DAC clock enable
   DAC->CR |= DAC_CR_EN1;                                //DAC channel 1 enable and set software trigger
 
@@ -331,8 +327,7 @@ void myDAC_Init()
   DAC->SWTRIGR |= DAC_SWTRIGR_SWTRIG1;
 }
 
-void mySPI_Init()
-{
+void mySPI_Init(){
 
   RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
   SPI_InitStruct->SPI_Direction = SPI_Direction_1Line_Tx;            //setting the direction of the transmission line
@@ -349,8 +344,7 @@ void mySPI_Init()
 }
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
-void TIM2_IRQHandler()
-{
+void TIM2_IRQHandler(){
   // Check if update interrupt flag is set
   if ((TIM2->SR & TIM_SR_UIF) != 0)
   {
@@ -365,8 +359,7 @@ void TIM2_IRQHandler()
 }
 
 /* This handler is declared in system/src/cmsis/vectors_stm32f0xx.c */
-void EXTI0_1_IRQHandler()
-{
+void EXTI0_1_IRQHandler(){
   count = TIM2->CNT;
 
   // Check if EXTI1 interrupt pending flag is set
@@ -383,7 +376,7 @@ void EXTI0_1_IRQHandler()
       EXTI->IMR &= ~(EXTI_IMR_MR1);
       TIM2->CR1 &= ~(TIM_CR1_CEN);                    //Stop timer (TIM2->CR1).
 
-      freq = SystemCoreClock/count;                    // Frequency in Hz
+      frequency = SystemCoreClock/count;                    // Frequency in Hz
       edge = 0;
       EXTI->IMR |= EXTI_IMR_MR1;
     }
