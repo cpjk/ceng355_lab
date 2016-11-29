@@ -50,8 +50,8 @@ void CommandSend(uint8_t);
 void CommandEnable(uint8_t);
 void SendToLCD(uint8_t);
 void DataEnable(uint8_t);
-void DisplayResistance(int);
-void DisplayFrequency(int);
+void displayResistance(int);
+void displayFrequency(int);
 
 unsigned int count;
 unsigned int edge = 0; // 1 = after rising edge. 0 = after falling edge
@@ -81,19 +81,19 @@ int main(int argc, char* argv[])
     DAC->DHR12R1 = ADC1->DR;       //output signal of ADC to the input of the DAC
 
     resistance = (ADC1->DR)*5000/4095;  // Calculate resistance
-    DisplayFrequency(frequency);        // send frequency to the LCD
-    DisplayResistance(resistance);      // send resistance to the LCD
+    displayFrequency(frequency);        // send frequency to the LCD
+    displayResistance(resistance);      // send resistance to the LCD
   }
 
   return 0;
 }
 
-void DisplayResistance(int Resistance){
+void displayResistance(int res){
   // break up the digits of the resistance
-  int thousands = Resistance/1000;
-  int hundred = (Resistance/100) % 10;
-  int ten = (Resistance/10) % 10;
-  int one = (Resistance) % 10;
+  int thousands = res/1000;
+  int hundred = (res/100) % 10;
+  int ten = (res/10) % 10;
+  int one = (res) % 10;
 
   CommandSend(0xC0); // set display to write to second line of the LCD
 
@@ -117,12 +117,12 @@ void sendr() {
   wait(DELAY);
 }
 
-void DisplayFrequency(int Frequency) {
+void displayFrequency(int freq) {
   // break up the digits of the frequency
-  int thousands = Frequency/1000 % 10;
-  int hundreds = (Frequency/100) % 10;
-  int tens = (Frequency/10) % 10;
-  int ones = (Frequency) % 10;
+  int thousands = freq/1000 % 10;
+  int hundreds = (freq/100) % 10;
+  int tens = (freq/10) % 10;
+  int ones = (freq) % 10;
 
   CommandSend(0x80);            //setting display to start with the LCD's first line
 
@@ -238,7 +238,7 @@ void LCD_Init(){
   // initialize the display
   CommandSend(0x28); // DL = 0, N = 1, F = 0 -> DRAM is accessed using 4-bit interface, 2 lines of 8 chars are displayed
   CommandSend(0x0C); // D = 1, C = 0, B = 0 -> Display on, no cursor, cursor is not blinking
-  CommandSend(0x06); // I/D = 1, S = 0 -> DDRAM addr is auto-incremented after each access, Display not shifted
+  CommandSend(0x06); // I/D = 1, S = 0 -> DDRAM addr is auto-incremented after each access, display not shifted
   CommandSend(0x01); // Clear display
 
   wait(DELAY);
