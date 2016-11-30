@@ -46,10 +46,10 @@ void mySPI_Init(void);
 void SPISendData(uint8_t);
 void wait(volatile long);
 void LCD_Init(void);
-void CommandSend(uint8_t);
-void CommandEnable(uint8_t);
-void SendToLCD(uint8_t);
-void DataEnable(uint8_t);
+void sendCommandToLCD(uint8_t);
+void sendCommandNibble(uint8_t);
+void sendCharToLCD(uint8_t);
+void sendDataNibble(uint8_t);
 void displayResistance(int);
 void displayFrequency(int);
 
@@ -60,13 +60,13 @@ int resistance = 0;
 
 int main(int argc, char* argv[])
 {
-  myGPIO_Init();            /* Initialize I/O port PA */
-  myTIM2_Init();            /* Initialize timer TIM2 */
-  myEXTI_Init();            /* Initialize EXTI */
-  myADC_Init();            /* initialize ADC*/
-  myDAC_Init();            /* initialize DAC*/
-  mySPI_Init();            /* initialize SPI*/
-  LCD_Init();              /* initialize LCD*/
+  myGPIO_Init(); /* Initialize I/O port PA */
+  myTIM2_Init(); /* Initialize timer TIM2 */
+  myEXTI_Init(); /* Initialize EXTI */
+  myADC_Init(); /* initialize ADC*/
+  myDAC_Init(); /* initialize DAC*/
+  mySPI_Init(); /* initialize SPI*/
+  LCD_Init(); /* initialize LCD*/
 
   trace_printf("Initialization complete\n");
 
@@ -76,9 +76,8 @@ int main(int argc, char* argv[])
   {
     ADC1->CR = ADC_CR_ADSTART; // Start the ADC
     while((ADC1->ISR & ADC_ISR_EOC) == 0); // Wait for the ADC to complete conversion
-    //trace_printf("ADC completed conversion.\n");
 
-    DAC->DHR12R1 = ADC1->DR;       //output signal of ADC to the input of the DAC
+    DAC->DHR12R1 = ADC1->DR; // copy ADC input buffer to DAC input buffer
 
     resistance = (ADC1->DR)*5000/4095;  // Calculate resistance
     displayFrequency(frequency);        // send frequency to the LCD
@@ -95,26 +94,19 @@ void displayResistance(int res){
   int ten = (res/10) % 10;
   int one = (res) % 10;
 
-  CommandSend(0xC0); // set display to write to second line of the LCD
+  sendCommandToLCD(0xC0); // set display to write to second line of the LCD
 
-  SendToLCD(0x52); // "R"
-  SendToLCD(0x3A); // ":"
+  sendCharToLCD(0x52); // "R"
+  sendCharToLCD(0x3A); // ":"
 
   // send each digit to the LCD
   // ('0' is converted to 48, and converts the resulting number to the corresponding ASCII number
-  SendToLCD(thousands + '0');
-  SendToLCD(hundred + '0');
-  SendToLCD(ten+ '0');
-  SendToLCD(one+ '0');
+  sendCharToLCD(thousands + '0');
+  sendCharToLCD(hundred + '0');
+  sendCharToLCD(ten+ '0');
+  sendCharToLCD(one+ '0');
 
-  SendToLCD(0xF4); //"O"
-}
-
-void sendr() {
-  CommandSend(0xC0); // set display to write to second line of the LCD
-  wait(DELAY);
-  SendToLCD(0x52); // "R"
-  wait(DELAY);
+  sendCharToLCD(0xF4); //"O"
 }
 
 void displayFrequency(int freq) {
@@ -124,20 +116,20 @@ void displayFrequency(int freq) {
   int tens = (freq/10) % 10;
   int ones = (freq) % 10;
 
-  CommandSend(0x80);            //setting display to start with the LCD's first line
+  sendCommandToLCD(0x80);            //setting display to start with the LCD's first line
 
-  SendToLCD(0x46); //"F"
-  SendToLCD(0x3A); //":"
+  sendCharToLCD(0x46); //"F"
+  sendCharToLCD(0x3A); //":"
 
   // send each digit to the LCD. ('0' is converted to 48, and
   // converts the resulting number to the corresponding ASCII number
-  SendToLCD(thousands + '0');
-  SendToLCD(hundreds + '0');
-  SendToLCD(tens + '0');
-  SendToLCD(ones + '0');
+  sendCharToLCD(thousands + '0');
+  sendCharToLCD(hundreds + '0');
+  sendCharToLCD(tens + '0');
+  sendCharToLCD(ones + '0');
 
-  SendToLCD(0x48); //"H"
-  SendToLCD(0x7A); //"z"
+  sendCharToLCD(0x48); //"H"
+  sendCharToLCD(0x7A); //"z"
 }
 
 void SPISendData(uint8_t Data) {
@@ -155,7 +147,7 @@ void SPISendData(uint8_t Data) {
   wait(2500); // GPIO delay
 }
 
-void DataEnable(uint8_t Word){
+void sendDataNibble(uint8_t Word){
   uint8_t L = Word | 0x40; //set high nibble to 0100  -> RS:1 -> LCD sees as DATA
   uint8_t H = Word | 0xC0; //set high nibble to 1100  -> EN:1, RS:1 -> DATA, LCD READS
 
@@ -166,7 +158,7 @@ void DataEnable(uint8_t Word){
   SPISendData(L); // (re-send data)
 }
 
-void CommandEnable(uint8_t Word){
+void sendCommandNibble(uint8_t Word){
   uint8_t EN = Word | 0x80;
 
   // send the word and toggle the EN bit
@@ -175,34 +167,31 @@ void CommandEnable(uint8_t Word){
   SPISendData(Word);
 }
 
-void CommandSend(uint8_t Word){
+void sendCommandToLCD(uint8_t Word){
   // shift high nibble to low order bits and clear the high order bits
-  uint8_t HighOrder = ((Word >> 4) & 0x0F);
-  CommandEnable(HighOrder);
+  uint8_t hiNibble = ((Word >> 4) & 0x0F);
+  sendCommandNibble(hiNibble);
   wait(DELAY);
 
   // clear the high order bits so we can send just the low nibble
-  uint8_t LowOrder = (Word & 0x0F);
-  CommandEnable(LowOrder);
+  uint8_t lowNibble = (Word & 0x0F);
+  sendCommandNibble(lowNibble);
   wait(DELAY);
 }
 
 void wait(volatile long delay){
-  while (delay != 0)
-  {
-    delay--;
-  }
+  while (delay != 0) delay--;
 }
 
-void SendToLCD(uint8_t Word){
+void sendCharToLCD(uint8_t chr){
   // shift high nibble to low order bits and clear the high order bits
-  uint8_t HighOrder = ((Word >> 4) & 0x0F);
-  DataEnable(HighOrder);
+  uint8_t hiNibble = ((chr >> 4) & 0x0F);
+  sendDataNibble(hiNibble);
   wait(DELAY);
 
   // clear the high order bits so we can send just the low nibble
-  uint8_t LowOrder = (Word & 0x0F);
-  DataEnable(LowOrder);
+  uint8_t lowNibble = (chr & 0x0F);
+  sendDataNibble(lowNibble);
   wait(DELAY); // delay for LCD
 }
 
@@ -236,10 +225,10 @@ void LCD_Init(){
   // LCD is now in 4-bit mode
 
   // initialize the display
-  CommandSend(0x28); // DL = 0, N = 1, F = 0 -> DRAM is accessed using 4-bit interface, 2 lines of 8 chars are displayed
-  CommandSend(0x0C); // D = 1, C = 0, B = 0 -> Display on, no cursor, cursor is not blinking
-  CommandSend(0x06); // I/D = 1, S = 0 -> DDRAM addr is auto-incremented after each access, display not shifted
-  CommandSend(0x01); // Clear display
+  sendCommandToLCD(0x28); // DL = 0, N = 1, F = 0 -> DRAM is accessed using 4-bit interface, 2 lines of 8 chars are displayed
+  sendCommandToLCD(0x0C); // D = 1, C = 0, B = 0 -> Display on, no cursor, cursor is not blinking
+  sendCommandToLCD(0x06); // I/D = 1, S = 0 -> DDRAM addr is auto-incremented after each access, display not shifted
+  sendCommandToLCD(0x01); // Clear display
 
   wait(DELAY);
 }
@@ -310,17 +299,17 @@ void myEXTI_Init(){
 }
 
 void myADC_Init(){
-  RCC->APB2ENR |= RCC_APB2ENR_ADCEN;            //ADC1 clock enable
-  ADC1->CFGR1 |= ADC_CFGR1_CONT;                    //this bit will ensure the ADC is in  continuous mosde and not single conversion mode
-  ADC1->CHSELR |= ADC_CHSELR_CHSEL2;            //channel 2 is selected for conversion
-  ADC1->SMPR |= ADC_SMPR_SMP;                            //sampling time selection (239.5 ADC cycles)
+  RCC->APB2ENR |= RCC_APB2ENR_ADCEN; // ADC1 clock enable
+  ADC1->CFGR1 |= ADC_CFGR1_CONT; // this bit will ensure the ADC is in  continuous mosde and not single conversion mode
+  ADC1->CHSELR |= ADC_CHSELR_CHSEL2; // channel 2 is selected for conversion
+  ADC1->SMPR |= ADC_SMPR_SMP; //sampling time selection (239.5 ADC cycles)
   ADC1->CR |= ADC_CR_ADEN;
-  while((ADC1->ISR & ADC_ISR_ADRDY) == 0);    //wait until ADC is ready
+  while((ADC1->ISR & ADC_ISR_ADRDY) == 0); //wait until ADC is ready
 }
 
 void myDAC_Init(){
-  RCC->APB1ENR |= RCC_APB1ENR_DACEN;                    //DAC clock enable
-  DAC->CR |= DAC_CR_EN1;                                //DAC channel 1 enable and set software trigger
+  RCC->APB1ENR |= RCC_APB1ENR_DACEN; // DAC clock enable
+  DAC->CR |= DAC_CR_EN1; // DAC channel 1 enable and set software trigger
 
   //Wake-up time
   DAC->CR |= DAC_CR_TSEL1;
@@ -330,15 +319,15 @@ void myDAC_Init(){
 void mySPI_Init(){
 
   RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
-  SPI_InitStruct->SPI_Direction = SPI_Direction_1Line_Tx;            //setting the direction of the transmission line
-  SPI_InitStruct->SPI_Mode = SPI_Mode_Master;                         //master mode
-  SPI_InitStruct->SPI_DataSize = SPI_DataSize_8b;                    //size of data being sent
-  SPI_InitStruct->SPI_CPOL = SPI_CPOL_Low;                           //idle clock polarity
-  SPI_InitStruct->SPI_CPHA = SPI_CPHA_1Edge;                         //active clock edge is its first/second one
-  SPI_InitStruct->SPI_NSS = SPI_NSS_Soft;                             //setting nss pin
-  SPI_InitStruct->SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_2;    //rate of sending data to LCD
-  SPI_InitStruct->SPI_FirstBit = SPI_FirstBit_MSB;                    //set spi so that the data is in msb mode (first packet is msb, second packet is lsb)
-  SPI_InitStruct->SPI_CRCPolynomial = 7;                                            //register contains polynomial for crc calculation
+  SPI_InitStruct->SPI_Direction = SPI_Direction_1Line_Tx; // setting the direction of the transmission line
+  SPI_InitStruct->SPI_Mode = SPI_Mode_Master; // master mode
+  SPI_InitStruct->SPI_DataSize = SPI_DataSize_8b; // set size of data being sent to 8 bits
+  SPI_InitStruct->SPI_CPOL = SPI_CPOL_Low; // idle clock polarity
+  SPI_InitStruct->SPI_CPHA = SPI_CPHA_1Edge; // active clock edge is its first/second one
+  SPI_InitStruct->SPI_NSS = SPI_NSS_Soft;  // setting nss pin
+  SPI_InitStruct->SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_2; // rate of sending data to LCD
+  SPI_InitStruct->SPI_FirstBit = SPI_FirstBit_MSB; // set spi so that the data is in msb mode (first packet is msb, second packet is lsb)
+  SPI_InitStruct->SPI_CRCPolynomial = 7; // register contains polynomial for crc calculation
   SPI_Init(SPI1, SPI_InitStruct);
   SPI_Cmd(SPI1, ENABLE);
 }
