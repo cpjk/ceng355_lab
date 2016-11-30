@@ -74,12 +74,15 @@ int main(int argc, char* argv[])
   // also pause between nibbles
   while (1) //loops forever
   {
-    ADC1->CR = ADC_CR_ADSTART; // Start the ADC
+    ADC1->CR = ADC_CR_ADSTART; // Start the ADC (must be enabled first)
+    // poll until end of conversion (EOC)
     while((ADC1->ISR & ADC_ISR_EOC) == 0); // Wait for the ADC to complete conversion
 
+    // DAC right aligned 12 bit data holding register
+    // get value from ADC1 data registers
     DAC->DHR12R1 = ADC1->DR; // copy ADC input buffer to DAC input buffer
 
-    resistance = (ADC1->DR)*5000/4095;  // Calculate resistance
+    resistance = (ADC1->DR)*5000/4095;  // get ADC data register 16 bit val, calculate resistance
     displayFrequency(frequency);        // send frequency to the LCD
     displayResistance(resistance);      // send resistance to the LCD
   }
@@ -151,7 +154,7 @@ void sendDataNibble(uint8_t Word){
   uint8_t L = Word | 0x40; //set high nibble to 0100  -> RS:1 -> LCD sees as DATA
   uint8_t H = Word | 0xC0; //set high nibble to 1100  -> EN:1, RS:1 -> DATA, LCD READS
 
-  SPISendData(L); //send L to SPI ( send data)
+  SPISendData(L); //send L to SPI (send data)
 
   SPISendData(H); //send H to SPI (send data and ask LCD to read it)
 
@@ -210,13 +213,14 @@ void LCD_Init(){
   */
   for(int i = 0; i<3;i++){
     // Set D7-D4 to 0b0011, and toggle the enable bit.
+    // set to 8 bit mode 3 times
     SPISendData(0x03);
     SPISendData(0x83);
     SPISendData(0x03);
   }
   // LCD is in 8-bit mode
 
-  // Toggle the enable bit while sending  (D7-D4) = 0010.
+  // Toggle the enable bit while sending (D7-D4) = 0010.
   // This sets the LCD to 4-bit mode
   SPISendData(0x02); // Send (D7-D4) = 0010 with (RS=0)
   SPISendData(0x82); // Send (D7-D4) = 0010 with (RS=0) (EN=1)
@@ -303,7 +307,7 @@ void myADC_Init(){
   ADC1->CFGR1 |= ADC_CFGR1_CONT; // this bit will ensure the ADC is in  continuous mosde and not single conversion mode
   ADC1->CHSELR |= ADC_CHSELR_CHSEL2; // channel 2 is selected for conversion
   ADC1->SMPR |= ADC_SMPR_SMP; //sampling time selection (239.5 ADC cycles)
-  ADC1->CR |= ADC_CR_ADEN;
+  ADC1->CR |= ADC_CR_ADEN;    // enable ADC in control register
   while((ADC1->ISR & ADC_ISR_ADRDY) == 0); //wait until ADC is ready
 }
 
@@ -311,20 +315,19 @@ void myDAC_Init(){
   RCC->APB1ENR |= RCC_APB1ENR_DACEN; // DAC clock enable
   DAC->CR |= DAC_CR_EN1; // DAC channel 1 enable and set software trigger
 
-  //Wake-up time
-  DAC->CR |= DAC_CR_TSEL1;
-  DAC->SWTRIGR |= DAC_SWTRIGR_SWTRIG1;
+  DAC->CR |= DAC_CR_TSEL1; //enable DAC software trigger
+  DAC->SWTRIGR |= DAC_SWTRIGR_SWTRIG1;  // set to trigger 1
 }
 
 void mySPI_Init(){
-
+  // full example in interface notes
   RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
   SPI_InitStruct->SPI_Direction = SPI_Direction_1Line_Tx; // setting the direction of the transmission line
-  SPI_InitStruct->SPI_Mode = SPI_Mode_Master; // master mode
+  SPI_InitStruct->SPI_Mode = SPI_Mode_Master; // master mode (it provides clock to slave)
   SPI_InitStruct->SPI_DataSize = SPI_DataSize_8b; // set size of data being sent to 8 bits
   SPI_InitStruct->SPI_CPOL = SPI_CPOL_Low; // idle clock polarity
   SPI_InitStruct->SPI_CPHA = SPI_CPHA_1Edge; // active clock edge is its first/second one
-  SPI_InitStruct->SPI_NSS = SPI_NSS_Soft;  // setting nss pin
+  SPI_InitStruct->SPI_NSS = SPI_NSS_Soft;  // software slave select.
   SPI_InitStruct->SPI_BaudRatePrescaler = SPI_BaudRatePrescaler_2; // rate of sending data to LCD
   SPI_InitStruct->SPI_FirstBit = SPI_FirstBit_MSB; // set spi so that the data is in msb mode (first packet is msb, second packet is lsb)
   SPI_InitStruct->SPI_CRCPolynomial = 7; // register contains polynomial for crc calculation
