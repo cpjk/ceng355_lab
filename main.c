@@ -58,8 +58,7 @@ unsigned int edge = 0; // 1 = after rising edge. 0 = after falling edge
 int frequency = 0;
 int resistance = 0;
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]){
   myGPIO_Init(); /* Initialize I/O port PA */
   myTIM2_Init(); /* Initialize timer TIM2 */
   myEXTI_Init(); /* Initialize EXTI */
@@ -112,7 +111,7 @@ void displayResistance(int res){
   sendCharToLCD(0xF4); //"O"
 }
 
-void displayFrequency(int freq) {
+void displayFrequency(int freq){
   // break up the digits of the frequency
   int thousands = freq/1000 % 10;
   int hundreds = (freq/100) % 10;
@@ -135,7 +134,7 @@ void displayFrequency(int freq) {
   sendCharToLCD(0x7A); //"z"
 }
 
-void SPISendData(uint8_t Data) {
+void SPISendData(uint8_t Data){
   //Force LCK signal to 0
   GPIOB->BRR |= GPIO_BRR_BR_4;  //set lock signal to 0 (freeze the ports)
   wait(2500); // GPIO delay
@@ -150,34 +149,34 @@ void SPISendData(uint8_t Data) {
   wait(2500); // GPIO delay
 }
 
-void sendDataNibble(uint8_t Word){
-  uint8_t L = Word | 0x40; //set high nibble to 0100  -> RS:1 -> LCD sees as DATA
-  uint8_t H = Word | 0xC0; //set high nibble to 1100  -> EN:1, RS:1 -> DATA, LCD READS
+void sendDataNibble(uint8_t nibble){
+  uint8_t data = nibble | 0x40; //set high nibble to 0100  -> RS:1 -> LCD sees as DATA
+  uint8_t data_enable = nibble | 0xC0; //set high nibble to 1100  -> EN:1, RS:1 -> DATA, LCD READS
 
-  SPISendData(L); //send L to SPI (send data)
+  SPISendData(data); //send L to SPI (send data)
 
-  SPISendData(H); //send H to SPI (send data and ask LCD to read it)
+  SPISendData(data_enable); //send H to SPI (send data and ask LCD to read it)
 
-  SPISendData(L); // (re-send data)
+  SPISendData(data); // (re-send data)
 }
 
-void sendCommandNibble(uint8_t Word){
-  uint8_t EN = Word | 0x80;
+void sendCommandNibble(uint8_t nibble){
+  uint8_t cmd_enable = nibble | 0x80;
 
   // send the word and toggle the EN bit
-  SPISendData(Word);
-  SPISendData(EN);
-  SPISendData(Word);
+  SPISendData(nibble);
+  SPISendData(cmd_enable);
+  SPISendData(nibble);
 }
 
-void sendCommandToLCD(uint8_t Word){
+void sendCommandToLCD(uint8_t byte){
   // shift high nibble to low order bits and clear the high order bits
-  uint8_t hiNibble = ((Word >> 4) & 0x0F);
+  uint8_t hiNibble = ((byte >> 4) & 0x0F);
   sendCommandNibble(hiNibble);
   wait(DELAY);
 
   // clear the high order bits so we can send just the low nibble
-  uint8_t lowNibble = (Word & 0x0F);
+  uint8_t lowNibble = (byte & 0x0F);
   sendCommandNibble(lowNibble);
   wait(DELAY);
 }
@@ -207,7 +206,6 @@ void LCD_Init(){
      (State1) 8-bit mode
      (State2) 4-bit mode, waiting for the first set of 4 bits
      (State3) 4-bit mode, waiting for the second set of 4 bits
-
      Set D7-D4 to 0b0011, and toggle the enable bit.
      This ensures the LCD is definitely in 8-bit mode
   */
@@ -304,7 +302,7 @@ void myEXTI_Init(){
 
 void myADC_Init(){
   RCC->APB2ENR |= RCC_APB2ENR_ADCEN; // ADC1 clock enable
-  ADC1->CFGR1 |= ADC_CFGR1_CONT; // this bit will ensure the ADC is in  continuous mosde and not single conversion mode
+  ADC1->CFGR1 |= ADC_CFGR1_CONT; // this bit will ensure the ADC is in  continuous mode and not single conversion mode
   ADC1->CHSELR |= ADC_CHSELR_CHSEL2; // channel 2 is selected for conversion
   ADC1->SMPR |= ADC_SMPR_SMP; //sampling time selection (239.5 ADC cycles)
   ADC1->CR |= ADC_CR_ADEN;    // enable ADC in control register
@@ -378,4 +376,3 @@ void EXTI0_1_IRQHandler(){
 }
 
 #pragma GCC diagnostic pop
-
